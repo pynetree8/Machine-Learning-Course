@@ -1,1 +1,164 @@
 theme: jekyll-theme-minimal
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+### Assignment
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The following definitions are of the individual class types, each representing a different way of performing the exercise:
+* Class A - exactly according to the specification
+* Class B - throwing the elbows to the front
+* Class C - lifting the dumbbell only halfway
+* Class D - lowering the dumbbell only halfway
+* Class E - throwing the hips to the front
+
+
+### Data Source
+
+The training data is a csv file downloaded from this site:https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The testing data is a csv file downloaded form this site:https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The following is the appropriate citation:
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+Read more: http:/groupware.les.inf.puc-rio.br/har#ixzz4TjprQa00
+
+## Methodology
+To perform this analysis, we will first dowload and process the data. A cursory review of the dataset indicates that there are several variables with blank entries and some variables that are clearly classifiers unrelated to any prediction. These variables will be first screened out from the analysis.
+
+We will then develop three predictive models and identify the best of the three. The selected models will be: a decision tree, a random forest, and a Principal Components Analysis. We will then analyze the test dataset using the best performing of the three models. 
+
+## Models
+The sections below indicate the code for processing the data and developing each of the three models. 
+
+### Loading the data and packages
+
+```{r load}
+## load packages
+library(RCurl)
+library(caret)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+## set seed
+set.seed(123)
+
+##load in data
+train <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", header = TRUE,na.strings = c("NA","NaN","","#DIV/0!"))
+test <-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", header = TRUE,na.strings = c("NA","NaN","","#DIV/0!"))
+```
+
+### Cleaning the data
+
+With a cursory review of the data, we notice that there are several varialbes with NAs. These variables will not be predictive, so it will help us to delete them and remove them from the dataset. The same goes for the first seven columns which deal with classifying the data. These have no bearing on the analysis either. We should delete them for clarity. 
+
+```{r clean}
+## clean out NA data
+train<-train[ , colSums(is.na(train)) == 0]
+test<-test[ , colSums(is.na(test)) == 0]
+
+## exclude columns 1:7 which have no bearing on the results
+train   <-train[,-c(1:7)]
+test   <-test[,-c(1:7)]
+```
+
+### Processing for model development
+
+While the course has prepared us with a training/ testing dataset, the testing dataset does not include the classifiers (we'll predict that later!). To help us verify our model before testing it, we will need to divide the training data into smaller training/ testing datasets. According to the course materials, a ratio of 60 percent training to 40 percent testing is appropriate. 
+
+Then, we notice that the classifer column has reverted to a character vector in the transformation. For future comparison, we need to make sure that the classe column remains a factor variable. 
+
+```{r process}
+## further divide the testing set into two groups 60%/40% in order to have two testing groups.
+inTrain<-createDataPartition(y=train$classe, p=0.6, list=FALSE)
+myTrain<-train[inTrain,]
+myTesting<-train[-inTrain,]
+
+#make sure training classe is a factor dataset
+myTrain$classe<-as.factor(myTrain$classe)
+myTesting$classe<-as.factor(myTesting$classe)
+```
+
+As an exploratory step, let's see how frequent each class is to understand if there is any bias in the dataset. 
+
+```{r explore}
+g<-ggplot(myTrain, aes(classe))
+g+geom_bar()
+```
+
+
+In this plot, we see that there is a fairly even spread among the classes. Class A is the most abundant, but the difference is not so marked as to seem to be a threat for bias. We'll proceed with developing three models. 
+
+### Model 1: Predict using a Decision Tree
+
+In the first model, use rpart to make a decision tree.
+
+```{r modelone}
+mod1<-rpart(classe ~., data=myTrain, method="class")
+pred1<-predict(mod1, myTesting, type="class")
+rpart.plot(mod1, main="Classification Model 1", extra=102, under=TRUE,faclen=0)
+```
+
+The following is a summary of the accuracy of the first model:
+
+```{r mod1results}
+mod1results<-confusionMatrix(pred1, myTesting$classe)
+mod1results
+
+```
+
+This model isn't particularly accurate. It has a **72.72% Accuracy Rate** (Confidence Interval: 71.72-73.71%). This model has an expected **out of sample error of 27.28%**. 
+
+### Model 2: Predict using a Random Forest
+
+In the second model, use randomForest to make a Random Forest model.
+
+```{r modeltwo}
+mod2<-randomForest(classe~., data=myTrain, method="class")
+pred2<-predict(mod2, myTesting, type = "class")
+```
+
+The following is a summary of the accuracy of the second model:
+
+```{r mod2results}
+mod2results<-confusionMatrix(pred2, myTesting$classe)
+mod2results
+
+```
+
+This model is an improvement on model 1. It has a **99.3% Accuracy Rate** (Confidence Interval: 99.09-99.47%). This model has an expected **out of sample error of 0.70%**. 
+
+### Model 3: Predict using a PCA with 10 components
+
+In the third model, use a PCA with 10 components to see if this model is an improvement on the second.
+
+```{r modelthree}
+mod3<-preProcess(myTrain[,1:53],method="pca", pcaComp = 10)
+trainingPCA<-predict(mod3,myTrain[,1:53])
+mod3ranfor<-randomForest(myTrain$classe ~., data=trainingPCA, do.trace=F)
+```
+
+The following is a summary of the accuracy of the third model:
+
+```{r mod3results}
+testingPCA<-predict(mod3,myTesting[,1:53])
+mod3results<-confusionMatrix(myTesting$classe, predict(mod3ranfor,testingPCA))
+mod3results
+```
+
+This model is an improvement on model 1, but is worse than model 2. It has a **94.9% Accuracy Rate** (Confidence Interval: 94.39-95.38%). This model has an expected **out of sample error of 5.1%**. 
+
+## Apply the Model to the Test Set
+The most accurate model we tested was the second model (Random Forests). In this step, we will apply the model to the test dataset to predict the class of the excercise.
+
+```{r predict}
+prediction<-predict(mod2,test,type="class")
+prediction
+
+```
